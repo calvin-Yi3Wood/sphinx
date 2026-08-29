@@ -1,0 +1,1 @@
+{"max_changed_test_files":8,"production_prefixes":["sphinx/"],"repository":"sphinx-doc/sphinx","schema_version":"cp2-137-native-sidecar-profile-v1","setup_argv":[["python","-m","pip","install","-e",".[test]"]],"test_argv_prefix":["python","-m","pytest","-q"],"test_prefixes":["tests/"]}

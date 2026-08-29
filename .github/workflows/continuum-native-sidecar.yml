@@ -1,0 +1,33 @@
+name: Continuum Native Sidecar
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-sidecar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run deterministic Native Sidecar replay
+        env:
+          PYTHONPATH: .continuum/native-sidecar
+        run: >-
+          python -m projecttruth.continuum_experiment.cp2137_native_sidecar_cli
+          --repository .
+          --profile .continuum/native-sidecar/profile.json
+          --commit "$GITHUB_SHA"
+          --output native-sidecar-receipt.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: continuum-native-sidecar-${{ github.sha }}
+          path: native-sidecar-receipt.json
+          if-no-files-found: error
