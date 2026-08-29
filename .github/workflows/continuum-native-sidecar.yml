@@ -2,6 +2,11 @@ name: Continuum Native Sidecar
 
 on:
   workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: Exact upstream sole-parent commit to evaluate
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -24,7 +29,7 @@ jobs:
           python -m projecttruth.continuum_experiment.cp2137_native_sidecar_cli
           --repository .
           --profile .continuum/native-sidecar/profile.json
-          --commit "$GITHUB_SHA"
+          --commit "${{ inputs.commit_sha }}"
           --output native-sidecar-receipt.json
       - uses: actions/upload-artifact@v4
         with:
