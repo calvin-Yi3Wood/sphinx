@@ -6,6 +6,7 @@ import ast
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -81,6 +82,7 @@ class NativeSidecarPlan:
     observed_at: str
     production_paths: tuple[str, ...]
     changed_test_paths: tuple[str, ...]
+    test_targets: tuple[str, ...]
     affected_symbols: tuple[str, ...]
     api_delta: tuple[str, ...]
     test_patch_bytes: bytes
@@ -224,6 +226,19 @@ def prepare_native_sidecar_plan(
     patch = b"" if not tests else bytes(
         _git(repository_path, "diff", "--binary", parent, commit, "--", *tests, binary=True)
     )
+    test_targets: set[str] = set()
+    current_test_path: str | None = None
+    for line in patch.decode("utf-8", errors="replace").splitlines():
+        if line.startswith("+++ b/"):
+            current_test_path = line[6:]
+            continue
+        if current_test_path is None:
+            continue
+        match = re.search(r"(?:^\+|@@.*@@\s+)def (test_[A-Za-z0-9_]+)", line)
+        if match is not None:
+            test_targets.add(f"{current_test_path}::{match.group(1)}")
+    if tests and not test_targets:
+        test_targets.update(tests)
     api_delta = _api_delta(repository_path, parent, commit, production)
     fields = {
         "repository": profile.repository,
@@ -235,6 +250,7 @@ def prepare_native_sidecar_plan(
         "observed_at": observed_at,
         "production_paths": list(production),
         "changed_test_paths": list(tests),
+        "test_targets": sorted(test_targets),
         "api_delta": list(api_delta),
         "test_patch_sha256": _digest(patch),
         "profile_sha256": profile.identity_sha256,
@@ -249,6 +265,7 @@ def prepare_native_sidecar_plan(
         observed_at=observed_at,
         production_paths=production,
         changed_test_paths=tests,
+        test_targets=tuple(sorted(test_targets)),
         affected_symbols=tuple(value.split(" ", 2)[-1] for value in api_delta),
         api_delta=api_delta,
         test_patch_bytes=patch,
@@ -325,9 +342,13 @@ def execute_native_sidecar_ci(
             if setup_result.returncode != 0:
                 setup_ok = False
                 print(setup_result.stderr.decode(errors="replace")[-4000:], file=sys.stderr)
-    command = (*profile.test_argv_prefix, *plan.changed_test_paths)
+    command = (*profile.test_argv_prefix, *plan.test_targets)
     parent = _run(command, parent_root) if setup_ok else subprocess.CompletedProcess(command, 125, b"", b"setup failed")
     current = _run(command, current_root) if setup_ok else subprocess.CompletedProcess(command, 125, b"", b"setup failed")
+    if parent.returncode != 0:
+        print(parent.stderr.decode(errors="replace")[-4000:], file=sys.stderr)
+    if current.returncode != 0:
+        print(current.stderr.decode(errors="replace")[-4000:], file=sys.stderr)
     environment_sha = _digest(
         {
             "python": sys.version,
