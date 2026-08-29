@@ -58,6 +58,9 @@ class NativeBehaviorEvidence:
     test_patch_sha256: str
     changed_test_paths: tuple[str, ...]
     parent_test_patch_applied: bool
+    setup_succeeded: bool
+    setup_stdout_sha256: str
+    setup_stderr_sha256: str
     parent_returncode: int
     parent_stdout_sha256: str
     parent_stderr_sha256: str
@@ -124,13 +127,15 @@ def _validate_evidence(value: NativeBehaviorEvidence) -> str:
         "parent_stderr_sha256",
         "current_stdout_sha256",
         "current_stderr_sha256",
+        "setup_stdout_sha256",
+        "setup_stderr_sha256",
     ):
         _sha(getattr(value, label), 64, label)
     if type(value.changed_test_paths) is not tuple or not value.changed_test_paths:
         raise NativeSidecarContractError("behavior evidence requires changed tests")
     tuple(_path(path) for path in value.changed_test_paths)
-    if type(value.parent_test_patch_applied) is not bool:
-        raise NativeSidecarContractError("parent test patch flag requires exact bool")
+    if type(value.parent_test_patch_applied) is not bool or type(value.setup_succeeded) is not bool:
+        raise NativeSidecarContractError("patch/setup flags require exact bool")
     for label in ("parent_returncode", "current_returncode"):
         if type(getattr(value, label)) is not int:
             raise NativeSidecarContractError(f"{label} requires exact int")
@@ -173,7 +178,10 @@ def compile_native_sidecar_receipt(value: NativeSidecarInput) -> NativeSidecarRe
         verified = False
     else:
         command_identity = _validate_evidence(value.behavior_evidence)
-        if not value.behavior_evidence.parent_test_patch_applied:
+        if not value.behavior_evidence.setup_succeeded:
+            status = "ABSTAINED_SETUP_FAILURE"
+            verified = False
+        elif not value.behavior_evidence.parent_test_patch_applied:
             status = "ABSTAINED_PARENT_TEST_PATCH_NOT_APPLIED"
             verified = False
         elif value.behavior_evidence.current_returncode != 0:
@@ -193,6 +201,9 @@ def compile_native_sidecar_receipt(value: NativeSidecarInput) -> NativeSidecarRe
             "test_patch_sha256": value.behavior_evidence.test_patch_sha256,
             "changed_test_paths": list(value.behavior_evidence.changed_test_paths),
             "parent_test_patch_applied": value.behavior_evidence.parent_test_patch_applied,
+            "setup_succeeded": value.behavior_evidence.setup_succeeded,
+            "setup_stdout_sha256": value.behavior_evidence.setup_stdout_sha256,
+            "setup_stderr_sha256": value.behavior_evidence.setup_stderr_sha256,
             "parent_returncode": value.behavior_evidence.parent_returncode,
             "parent_stdout_sha256": value.behavior_evidence.parent_stdout_sha256,
             "parent_stderr_sha256": value.behavior_evidence.parent_stderr_sha256,

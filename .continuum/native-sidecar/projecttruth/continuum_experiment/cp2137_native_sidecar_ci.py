@@ -315,9 +315,16 @@ def execute_native_sidecar_ci(
         check=False,
     ).returncode == 0
     setup_ok = applied
+    setup_stdout = bytearray()
+    setup_stderr = bytearray()
     for root in (parent_root, current_root):
         for command in profile.setup_argv:
-            setup_ok = setup_ok and _run(command, root).returncode == 0
+            setup_result = _run(command, root)
+            setup_stdout.extend(setup_result.stdout)
+            setup_stderr.extend(setup_result.stderr)
+            if setup_result.returncode != 0:
+                setup_ok = False
+                print(setup_result.stderr.decode(errors="replace")[-4000:], file=sys.stderr)
     command = (*profile.test_argv_prefix, *plan.changed_test_paths)
     parent = _run(command, parent_root) if setup_ok else subprocess.CompletedProcess(command, 125, b"", b"setup failed")
     current = _run(command, current_root) if setup_ok else subprocess.CompletedProcess(command, 125, b"", b"setup failed")
@@ -334,6 +341,9 @@ def execute_native_sidecar_ci(
         test_patch_sha256=_digest(plan.test_patch_bytes),
         changed_test_paths=plan.changed_test_paths,
         parent_test_patch_applied=applied,
+        setup_succeeded=setup_ok,
+        setup_stdout_sha256=_digest(bytes(setup_stdout)),
+        setup_stderr_sha256=_digest(bytes(setup_stderr)),
         parent_returncode=parent.returncode,
         parent_stdout_sha256=_digest(parent.stdout),
         parent_stderr_sha256=_digest(parent.stderr),
